@@ -70,18 +70,18 @@ export function useBills(roomId: number) {
   }, [roomId])
 
   const getBillDetail = useCallback(async (billId: number): Promise<BillDetail> => {
-    const res = await api.get(`/bills/${billId}`)
+    const res = await api.get(`/rooms/bills/${billId}`)
     return res.data
   }, [])
 
   const editBill = useCallback(async (billId: number, data: { amount: number; note: string; splitUserIds: number[] }) => {
-    const res = await api.put(`/bills/${billId}`, data)
+    const res = await api.put(`/rooms/bills/${billId}`, data)
     setBills((prev) => prev.map((b) => (b.id === billId ? res.data : b)))
     return res.data
   }, [])
 
   const deleteBill = useCallback(async (billId: number) => {
-    await api.delete(`/bills/${billId}`)
+    await api.delete(`/rooms/bills/${billId}`)
     setBills((prev) => prev.filter((b) => b.id !== billId))
   }, [])
 

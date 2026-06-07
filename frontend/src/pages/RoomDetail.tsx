@@ -25,6 +25,7 @@ export default function RoomDetail() {
     note: '',
     splitUserIds: [] as number[],
   })
+  const [editError, setEditError] = useState('')
 
   const [form, setForm] = useState({
     type: '水电',
@@ -33,19 +34,33 @@ export default function RoomDetail() {
     note: '',
     splitUserIds: [] as number[],
   })
+  const [formError, setFormError] = useState('')
 
   const handleAddBill = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (form.splitUserIds.length === 0) return
-    await addBill({
-      type: form.type,
-      amount: Number(form.amount),
-      date: form.date,
-      note: form.note,
-      splitUserIds: form.splitUserIds,
-    })
-    setForm({ type: '水电', amount: '', date: new Date().toISOString().slice(0, 10), note: '', splitUserIds: [] })
-    setShowBillForm(false)
+    setFormError('')
+    if (!form.amount || Number(form.amount) <= 0) {
+      setFormError('请输入大于 0 的金额')
+      return
+    }
+    if (form.splitUserIds.length === 0) {
+      setFormError('请选择至少一个分摊人')
+      return
+    }
+    try {
+      await addBill({
+        type: form.type,
+        amount: Number(form.amount),
+        date: form.date,
+        note: form.note,
+        splitUserIds: form.splitUserIds,
+      })
+      await fetchBalances()
+      setForm({ type: '水电', amount: '', date: new Date().toISOString().slice(0, 10), note: '', splitUserIds: [] })
+      setShowBillForm(false)
+    } catch (err: any) {
+      setFormError(err.response?.data?.error || '保存失败，请重试')
+    }
   }
 
   const toggleSplitUser = (userId: number) => {
@@ -58,6 +73,7 @@ export default function RoomDetail() {
   }
 
   const handleOpenEdit = async (billId: number) => {
+    setEditError('')
     const detail = await getBillDetail(billId)
     setEditingBill(detail)
     setEditForm({
@@ -70,6 +86,7 @@ export default function RoomDetail() {
   const handleCloseEdit = () => {
     setEditingBill(null)
     setEditForm({ amount: '', note: '', splitUserIds: [] })
+    setEditError('')
   }
 
   const toggleEditSplitUser = (userId: number) => {
@@ -83,13 +100,27 @@ export default function RoomDetail() {
 
   const handleEditBill = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingBill || editForm.splitUserIds.length === 0) return
-    await editBill(editingBill.id, {
-      amount: Number(editForm.amount),
-      note: editForm.note,
-      splitUserIds: editForm.splitUserIds,
-    })
-    handleCloseEdit()
+    setEditError('')
+    if (!editingBill) return
+    if (!editForm.amount || Number(editForm.amount) <= 0) {
+      setEditError('请输入大于 0 的金额')
+      return
+    }
+    if (editForm.splitUserIds.length === 0) {
+      setEditError('请选择至少一个分摊人')
+      return
+    }
+    try {
+      await editBill(editingBill.id, {
+        amount: Number(editForm.amount),
+        note: editForm.note,
+        splitUserIds: editForm.splitUserIds,
+      })
+      await fetchBalances()
+      handleCloseEdit()
+    } catch (err: any) {
+      setEditError(err.response?.data?.error || '保存失败，请重试')
+    }
   }
 
   return (
@@ -144,9 +175,10 @@ export default function RoomDetail() {
               ))}
             </div>
           </div>
+          {formError && <p className="text-sm text-red-500">{formError}</p>}
           <div className="flex gap-2">
             <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm">保存</button>
-            <button type="button" onClick={() => setShowBillForm(false)} className="text-gray-500 px-4 py-2 text-sm">取消</button>
+            <button type="button" onClick={() => { setShowBillForm(false); setFormError('') }} className="text-gray-500 px-4 py-2 text-sm">取消</button>
           </div>
         </form>
       )}
@@ -177,6 +209,7 @@ export default function RoomDetail() {
               ))}
             </div>
           </div>
+          {editError && <p className="text-sm text-red-500">{editError}</p>}
           <div className="flex gap-2">
             <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm">保存修改</button>
             <button type="button" onClick={handleCloseEdit} className="text-gray-500 px-4 py-2 text-sm">取消</button>
@@ -225,7 +258,16 @@ export default function RoomDetail() {
             </div>
             <div className="flex items-center gap-1 ml-2">
               <button onClick={() => handleOpenEdit(bill.id)} className="text-gray-400 hover:text-emerald-600 p-1"><Edit2 size={16} /></button>
-              <button onClick={() => deleteBill(bill.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+              <button onClick={async () => {
+                if (confirm('确定要删除这条账单吗？')) {
+                  try {
+                    await deleteBill(bill.id)
+                    await fetchBalances()
+                  } catch (err) {
+                    alert('删除失败，请重试')
+                  }
+                }
+              }} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}

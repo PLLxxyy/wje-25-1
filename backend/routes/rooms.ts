@@ -64,6 +64,15 @@ router.get('/:id/bills', (req, res) => {
 router.post('/:id/bills', (req: any, res) => {
   const userId = req.userId
   const { type, amount, date, note, splitUserIds } = req.body
+  if (typeof amount !== 'number' || amount <= 0) {
+    return res.status(400).json({ error: '金额必须大于 0' })
+  }
+  if (!Array.isArray(splitUserIds) || splitUserIds.length === 0) {
+    return res.status(400).json({ error: '请选择至少一个分摊人' })
+  }
+  if (!type || !date) {
+    return res.status(400).json({ error: '请填写完整的账单信息' })
+  }
   const result = db.prepare('INSERT INTO bills (room_id, payer_id, type, amount, date, note) VALUES (?, ?, ?, ?, ?, ?)')
     .run(req.params.id, userId, type, amount, date, note || '')
   const billId = result.lastInsertRowid as number
@@ -101,6 +110,12 @@ router.get('/bills/:id', (req, res) => {
 router.put('/bills/:id', (req: any, res) => {
   const { amount, note, splitUserIds } = req.body
   const billId = Number(req.params.id)
+  if (typeof amount !== 'number' || amount <= 0) {
+    return res.status(400).json({ error: '金额必须大于 0' })
+  }
+  if (!Array.isArray(splitUserIds) || splitUserIds.length === 0) {
+    return res.status(400).json({ error: '请选择至少一个分摊人' })
+  }
   const bill = db.prepare('SELECT * FROM bills WHERE id = ?').get(billId)
   if (!bill) return res.status(404).json({ error: '账单不存在' })
   db.prepare('UPDATE bills SET amount = ?, note = ? WHERE id = ?')
