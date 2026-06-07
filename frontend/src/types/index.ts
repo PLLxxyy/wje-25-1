@@ -32,6 +32,10 @@ export interface Bill {
   createdAt: string
 }
 
+export interface BillDetail extends Bill {
+  splits: BillSplit[]
+}
+
 export interface BillSplit {
   id: number
   billId: number

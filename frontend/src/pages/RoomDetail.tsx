@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Users, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Users, Trash2, Edit2 } from 'lucide-react'
 import { useRoomMembers, useBills, useBalances } from '@/hooks/useRooms'
 import { formatDate, formatMoney } from '@/utils/format'
+import type { BillDetail } from '@/types'
 
 const BILL_TYPES = ['水电', '网费', '日用品', '聚餐', '房租', '其他']
 
@@ -10,13 +11,20 @@ export default function RoomDetail() {
   const { id } = useParams<{ id: string }>()
   const roomId = Number(id)
   const { members, inviteMember } = useRoomMembers(roomId)
-  const { bills, addBill, deleteBill } = useBills(roomId)
+  const { bills, addBill, getBillDetail, editBill, deleteBill } = useBills(roomId)
   const { balances, transfers, fetchBalances } = useBalances(roomId)
 
   const [showBillForm, setShowBillForm] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettle, setShowSettle] = useState(false)
   const [inviteUsername, setInviteUsername] = useState('')
+
+  const [editingBill, setEditingBill] = useState<BillDetail | null>(null)
+  const [editForm, setEditForm] = useState({
+    amount: '',
+    note: '',
+    splitUserIds: [] as number[],
+  })
 
   const [form, setForm] = useState({
     type: '水电',
@@ -47,6 +55,41 @@ export default function RoomDetail() {
         ? prev.splitUserIds.filter((id) => id !== userId)
         : [...prev.splitUserIds, userId],
     }))
+  }
+
+  const handleOpenEdit = async (billId: number) => {
+    const detail = await getBillDetail(billId)
+    setEditingBill(detail)
+    setEditForm({
+      amount: detail.amount.toString(),
+      note: detail.note,
+      splitUserIds: detail.splits.map((s) => s.userId),
+    })
+  }
+
+  const handleCloseEdit = () => {
+    setEditingBill(null)
+    setEditForm({ amount: '', note: '', splitUserIds: [] })
+  }
+
+  const toggleEditSplitUser = (userId: number) => {
+    setEditForm((prev) => ({
+      ...prev,
+      splitUserIds: prev.splitUserIds.includes(userId)
+        ? prev.splitUserIds.filter((id) => id !== userId)
+        : [...prev.splitUserIds, userId],
+    }))
+  }
+
+  const handleEditBill = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingBill || editForm.splitUserIds.length === 0) return
+    await editBill(editingBill.id, {
+      amount: Number(editForm.amount),
+      note: editForm.note,
+      splitUserIds: editForm.splitUserIds,
+    })
+    handleCloseEdit()
   }
 
   return (
@@ -108,6 +151,39 @@ export default function RoomDetail() {
         </form>
       )}
 
+      {editingBill && (
+        <form onSubmit={handleEditBill} className="bg-white rounded-xl shadow p-4 mb-6 space-y-3 border-2 border-emerald-200">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-medium text-emerald-700">编辑账单</span>
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">{editingBill.type}</span>
+            <span className="text-xs text-gray-500">{formatDate(editingBill.date)} · {editingBill.payerName} 垫付</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="number" placeholder="金额" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" required />
+            <input placeholder="备注" value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">参与分摊的人</label>
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {members.map((m) => (
+                <label key={m.userId} className="flex items-center gap-1 text-sm bg-gray-100 px-3 py-1 rounded-full cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.splitUserIds.includes(m.userId)}
+                    onChange={() => toggleEditSplitUser(m.userId)}
+                  />
+                  {m.displayName}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm">保存修改</button>
+            <button type="button" onClick={handleCloseEdit} className="text-gray-500 px-4 py-2 text-sm">取消</button>
+          </div>
+        </form>
+      )}
+
       {showSettle && (
         <div className="bg-white rounded-xl shadow p-5 mb-6">
           <h3 className="font-semibold mb-3">当前余额</h3>
@@ -140,14 +216,17 @@ export default function RoomDetail() {
       <div className="space-y-3">
         {bills.map((bill) => (
           <div key={bill.id} className="bg-white rounded-xl shadow p-4 flex items-start justify-between">
-            <div>
+            <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">{bill.type}</span>
                 <span className="font-medium text-sm">{formatMoney(bill.amount)}</span>
               </div>
               <div className="text-xs text-gray-500 mt-1">{formatDate(bill.date)} · {bill.payerName} 垫付 · {bill.note}</div>
             </div>
-            <button onClick={() => deleteBill(bill.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+            <div className="flex items-center gap-1 ml-2">
+              <button onClick={() => handleOpenEdit(bill.id)} className="text-gray-400 hover:text-emerald-600 p-1"><Edit2 size={16} /></button>
+              <button onClick={() => deleteBill(bill.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={16} /></button>
+            </div>
           </div>
         ))}
       </div>

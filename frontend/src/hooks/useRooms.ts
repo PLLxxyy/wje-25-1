@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/utils/api'
-import type { Room, RoomMember, Bill, Balance, Transfer } from '@/types'
+import type { Room, RoomMember, Bill, BillDetail, Balance, Transfer } from '@/types'
 
 export function useRooms() {
   const [rooms, setRooms] = useState<Room[]>([])
@@ -69,12 +69,23 @@ export function useBills(roomId: number) {
     return res.data
   }, [roomId])
 
+  const getBillDetail = useCallback(async (billId: number): Promise<BillDetail> => {
+    const res = await api.get(`/bills/${billId}`)
+    return res.data
+  }, [])
+
+  const editBill = useCallback(async (billId: number, data: { amount: number; note: string; splitUserIds: number[] }) => {
+    const res = await api.put(`/bills/${billId}`, data)
+    setBills((prev) => prev.map((b) => (b.id === billId ? res.data : b)))
+    return res.data
+  }, [])
+
   const deleteBill = useCallback(async (billId: number) => {
     await api.delete(`/bills/${billId}`)
     setBills((prev) => prev.filter((b) => b.id !== billId))
   }, [])
 
-  return { bills, fetchBills, addBill, deleteBill }
+  return { bills, fetchBills, addBill, getBillDetail, editBill, deleteBill }
 }
 
 export function useBalances(roomId: number) {

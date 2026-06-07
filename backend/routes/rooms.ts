@@ -51,7 +51,8 @@ router.post('/:id/members', (req, res) => {
 
 router.get('/:id/bills', (req, res) => {
   const bills = db.prepare(`
-    SELECT b.*, u.display_name as payerName
+    SELECT b.id, b.room_id as roomId, b.payer_id as payerId, u.display_name as payerName,
+           b.type, b.amount, b.date, b.note, b.created_at as createdAt
     FROM bills b
     JOIN users u ON b.payer_id = u.id
     WHERE b.room_id = ?
@@ -69,8 +70,53 @@ router.post('/:id/bills', (req: any, res) => {
   const share = amount / splitUserIds.length
   const splitStmt = db.prepare('INSERT INTO bill_splits (bill_id, user_id, share) VALUES (?, ?, ?)')
   splitUserIds.forEach((uid: number) => splitStmt.run(billId, uid, share))
-  const bill = db.prepare('SELECT b.*, u.display_name as payerName FROM bills b JOIN users u ON b.payer_id = u.id WHERE b.id = ?').get(billId)
+  const bill = db.prepare(`
+    SELECT b.id, b.room_id as roomId, b.payer_id as payerId, u.display_name as payerName,
+           b.type, b.amount, b.date, b.note, b.created_at as createdAt
+    FROM bills b
+    JOIN users u ON b.payer_id = u.id
+    WHERE b.id = ?
+  `).get(billId)
   res.json(bill)
+})
+
+router.get('/bills/:id', (req, res) => {
+  const bill = db.prepare(`
+    SELECT b.id, b.room_id as roomId, b.payer_id as payerId, u.display_name as payerName,
+           b.type, b.amount, b.date, b.note, b.created_at as createdAt
+    FROM bills b
+    JOIN users u ON b.payer_id = u.id
+    WHERE b.id = ?
+  `).get(req.params.id)
+  if (!bill) return res.status(404).json({ error: '账单不存在' })
+  const splits = db.prepare(`
+    SELECT bs.id, bs.bill_id as billId, bs.user_id as userId, bs.share, u.username, u.display_name as displayName
+    FROM bill_splits bs
+    JOIN users u ON bs.user_id = u.id
+    WHERE bs.bill_id = ?
+  `).all(req.params.id)
+  res.json({ ...bill, splits })
+})
+
+router.put('/bills/:id', (req: any, res) => {
+  const { amount, note, splitUserIds } = req.body
+  const billId = Number(req.params.id)
+  const bill = db.prepare('SELECT * FROM bills WHERE id = ?').get(billId)
+  if (!bill) return res.status(404).json({ error: '账单不存在' })
+  db.prepare('UPDATE bills SET amount = ?, note = ? WHERE id = ?')
+    .run(amount, note || '', billId)
+  db.prepare('DELETE FROM bill_splits WHERE bill_id = ?').run(billId)
+  const share = amount / splitUserIds.length
+  const splitStmt = db.prepare('INSERT INTO bill_splits (bill_id, user_id, share) VALUES (?, ?, ?)')
+  splitUserIds.forEach((uid: number) => splitStmt.run(billId, uid, share))
+  const updatedBill = db.prepare(`
+    SELECT b.id, b.room_id as roomId, b.payer_id as payerId, u.display_name as payerName,
+           b.type, b.amount, b.date, b.note, b.created_at as createdAt
+    FROM bills b
+    JOIN users u ON b.payer_id = u.id
+    WHERE b.id = ?
+  `).get(billId)
+  res.json(updatedBill)
 })
 
 router.delete('/bills/:id', (req, res) => {
